@@ -24,7 +24,7 @@ pipeline {
                 withSonarQubeEnv('SonarQube') {
                     script {
                         // Get the sonar-scanner installation path
-                        def scannerHome = tool 'sonar-scanner'
+                        def scannerHome = tool 'SonarQube'
                         sh """
                         ${scannerHome}/bin/sonar-scanner \
                           -Dsonar.projectKey=book-my-show \
