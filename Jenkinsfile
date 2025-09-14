@@ -20,25 +20,23 @@ pipeline {
         }
 
         stage('SonarQube Analysis') {
-            steps {
-                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                    // Set up SonarQube environment from Jenkins
-                    withSonarQubeEnv('SonarQube') {
-                        sh '''
-                            # Export the token for Docker to pick it up
-                            export SONAR_LOGIN=$SONAR_TOKEN
-                            docker run --rm \
-                              -v $WORKSPACE:/usr/src \
-                              -e SONAR_HOST_URL=$SONAR_HOST_URL \
-                              -e SONAR_LOGIN \
-                              sonarsource/sonar-scanner-cli \
-                              -Dsonar.projectKey=book-my-show \
-                              -Dsonar.sources=/usr/src
-                        '''
-                    }
+    steps {
+        withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_AUTH_TOKEN')]) {
+            withSonarQubeEnv('SonarQube') {
+                script {
+                    def scannerHome = tool 'SonarQube'  // SonarScanner installation
+                    sh """
+                    ${scannerHome}/bin/sonar-scanner \
+                      -Dsonar.projectKey=book-my-show \
+                      -Dsonar.sources=./book-my-show-app \
+                      -Dsonar.host.url=$SONAR_HOST_URL \
+                      -Dsonar.login=$SONAR_AUTH_TOKEN
+                    """
                 }
             }
         }
+    }
+}
 
         stage('SonarQube Quality Gate') {
             steps {
