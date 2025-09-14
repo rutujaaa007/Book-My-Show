@@ -22,18 +22,21 @@ pipeline {
         stage('SonarQube Analysis') {
     steps {
         withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_AUTH_TOKEN')]) {
-            withSonarQubeEnv('SonarQube') {
-                sh """
-                /var/lib/jenkins/tools/hudson.plugins.sonar.SonarRunnerInstallation/sonar-scanner/bin/sonar-scanner \
-                  -Dsonar.projectKey=book-my-show \
-                  -Dsonar.sources=. \
-                  -Dsonar.host.url=$SONAR_HOST_URL \
-                  -Dsonar.login=$SONAR_AUTH_TOKEN
-                """
+            withSonarQubeEnv('SonarQube') {   // Matches your configured server name
+                script {
+                    def scannerHome = tool 'SonarQubeScanner'   // Matches your scanner installation
+                    sh """
+                        ${scannerHome}/bin/sonar-scanner \
+                          -Dsonar.projectKey=book-my-show \
+                          -Dsonar.sources=. \
+                          -Dsonar.host.url=$SONAR_HOST_URL \
+                          -Dsonar.login=$SONAR_AUTH_TOKEN
+                    """
+                }
             }
         }
     }
-}
+}        
 
         stage('SonarQube Quality Gate') {
             steps {
