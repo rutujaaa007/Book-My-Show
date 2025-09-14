@@ -1,4 +1,4 @@
-FROM node:18-alpine
+FROM node:18-alpine AS build
 
 WORKDIR /app
 
@@ -7,9 +7,16 @@ RUN npm install
 
 COPY bookmyshow-app/ ./
 
-# 👇 Add this before build
+# 👇 must be set BEFORE the build command
 ENV NODE_OPTIONS=--openssl-legacy-provider
 
 RUN npm run build
+
+# If you have a second stage for production, continue here
+FROM node:18-alpine
+
+WORKDIR /app
+
+COPY --from=build /app/build ./build
 
 CMD ["npm", "start"]
