@@ -1,26 +1,14 @@
-# Stage 1: Build the React app
-FROM node:18-alpine AS build
-
+# Step 1: Build the React app
+FROM node:18 AS build
 WORKDIR /app
-
-# Copy package.json and install dependencies
-COPY bookmyshow-app/package*.json ./
+COPY package*.json ./
 RUN npm install
-
-# Copy the rest of the source code
-COPY bookmyshow-app/ ./
-
-# Build the app
+COPY . .
 RUN npm run build
 
-# Stage 2: Serve the app using nginx
+# Step 2: Serve using Nginx
 FROM nginx:alpine
-
-# Copy build output from previous stage to nginx html folder
 COPY --from=build /app/build /usr/share/nginx/html
-
-# Expose port 3000
-EXPOSE 80
-
-# Run nginx in foreground
+EXPOSE 3000
 CMD ["nginx", "-g", "daemon off;"]
+
