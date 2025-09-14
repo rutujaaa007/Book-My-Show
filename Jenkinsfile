@@ -21,17 +21,20 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube') {
-                    script {
-                        // Get the sonar-scanner installation path
-                        def scannerHome = tool 'SonarQube'
-                        sh """
-                        ${scannerHome}/bin/sonar-scanner \
-                          -Dsonar.projectKey=book-my-show \
-                          -Dsonar.sources=./book-my-show-app \
-                          -Dsonar.host.url=$SONAR_HOST_URL \
-                          -Dsonar.login=$SONAR_AUTH_TOKEN
-                        """
+                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                    // Set up SonarQube environment from Jenkins
+                    withSonarQubeEnv('SonarQube') {
+                        sh '''
+                            # Export the token for Docker to pick it up
+                            export SONAR_LOGIN=$SONAR_TOKEN
+                            docker run --rm \
+                              -v $WORKSPACE:/usr/src \
+                              -e SONAR_HOST_URL=$SONAR_HOST_URL \
+                              -e SONAR_LOGIN \
+                              sonarsource/sonar-scanner-cli \
+                              -Dsonar.projectKey=book-my-show \
+                              -Dsonar.sources=/usr/src
+                        '''
                     }
                 }
             }
@@ -39,10 +42,12 @@ pipeline {
 
         stage('SonarQube Quality Gate') {
             steps {
-                script {
-                    def qg = waitForQualityGate()
-                    if (qg.status != 'OK') {
-                        error "Pipeline failed due to SonarQube Quality Gate: ${qg.status}"
+                timeout(time: 1, unit: 'HOURS') { // optional timeout
+                    script {
+                        def qg = waitForQualityGate()
+                        if (qg.status != 'OK') {
+                            error "Pipeline failed due to SonarQube Quality Gate: ${qg.status}"
+                        }
                     }
                 }
             }
@@ -58,7 +63,7 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'docker-token', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     script {
-                        IMAGE = "${DOCKERHUB_REPO}:${BUILD_NUMBER}"
+                        def IMAGE = "${DOCKERHUB_REPO}:${BUILD_NUMBER}"
                         sh "docker build -t ${IMAGE} ."
                         sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
                         sh "docker push ${IMAGE}"
@@ -70,10 +75,12 @@ pipeline {
 
         stage('Deploy to Docker Container') {
             steps {
-                sh '''
-                    docker rm -f bms || true
-                    docker run -d -p 3000:3000 --name bms ${IMAGE}
-                '''
+                script {
+                    sh '''
+                        docker rm -f bms || true
+                        docker run -d -p 3000:3000 --name bms ${env.IMAGE}
+                    '''
+                }
             }
         }
     }
