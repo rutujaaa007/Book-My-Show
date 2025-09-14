@@ -22,27 +22,32 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                    sh '''
-                        # Export the token for Docker to pick it up
-                        export SONAR_LOGIN=$SONAR_TOKEN
-                        docker run --rm \
-                          -v $WORKSPACE:/usr/src \
-                          -e SONAR_HOST_URL=http://15.237.220.124:9000 \
-                          -e SONAR_LOGIN \
-                          sonarsource/sonar-scanner-cli \
-                          -Dsonar.projectKey=book-my-show \
-                          -Dsonar.sources=/usr/src
-                    '''
+                    // Set up SonarQube environment from Jenkins
+                    withSonarQubeEnv('SonarQube') {
+                        sh '''
+                            # Export the token for Docker to pick it up
+                            export SONAR_LOGIN=$SONAR_TOKEN
+                            docker run --rm \
+                              -v $WORKSPACE:/usr/src \
+                              -e SONAR_HOST_URL=$SONAR_HOST_URL \
+                              -e SONAR_LOGIN \
+                              sonarsource/sonar-scanner-cli \
+                              -Dsonar.projectKey=book-my-show \
+                              -Dsonar.sources=/usr/src
+                        '''
+                    }
                 }
             }
         }
 
         stage('SonarQube Quality Gate') {
             steps {
-                script {
-                    def qg = waitForQualityGate()
-                    if (qg.status != 'OK') {
-                        error "Pipeline failed due to SonarQube Quality Gate: ${qg.status}"
+                timeout(time: 1, unit: 'HOURS') { // optional timeout
+                    script {
+                        def qg = waitForQualityGate()
+                        if (qg.status != 'OK') {
+                            error "Pipeline failed due to SonarQube Quality Gate: ${qg.status}"
+                        }
                     }
                 }
             }
