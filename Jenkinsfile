@@ -23,16 +23,13 @@ pipeline {
     steps {
         withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_AUTH_TOKEN')]) {
             withSonarQubeEnv('SonarQube') {
-                script {
-                    def scannerHome = tool 'SonarQube'  // SonarScanner installation
-                    sh """
-                    ${scannerHome}/bin/sonar-scanner \
-                      -Dsonar.projectKey=book-my-show \
-                      -Dsonar.sources=./book-my-show-app \
-                      -Dsonar.host.url=$SONAR_HOST_URL \
-                      -Dsonar.login=$SONAR_AUTH_TOKEN
-                    """
-                }
+                sh """
+                /var/lib/jenkins/tools/hudson.plugins.sonar.SonarRunnerInstallation/sonar-scanner/bin/sonar-scanner \
+                  -Dsonar.projectKey=book-my-show \
+                  -Dsonar.sources=. \
+                  -Dsonar.host.url=$SONAR_HOST_URL \
+                  -Dsonar.login=$SONAR_AUTH_TOKEN
+                """
             }
         }
     }
