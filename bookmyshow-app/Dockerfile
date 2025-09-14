@@ -1,20 +1,19 @@
-# ---- Build Stage ----
-FROM node:16-alpine AS build
-
+# Stage 1: Build React app
+FROM node:18 AS build
 WORKDIR /app
 
-COPY bookmyshow-app/package*.json ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm install --legacy-peer-deps
+COPY . .
 
-COPY bookmyshow-app/ ./
+# 👇 Important: fix for OpenSSL error in Node 18
+ENV NODE_OPTIONS=--openssl-legacy-provider
+
 RUN npm run build
 
-# ---- Production Stage ----
-FROM node:16-alpine
+# Stage 2: Serve with Nginx
+FROM nginx:alpine
+COPY --from=build /app/build /usr/share/nginx/html
 
-WORKDIR /app
-COPY --from=build /app/build ./build
-
-RUN npm install -g serve
 EXPOSE 3000
-CMD ["serve", "-s", "build", "-l", "3000"]
+CMD ["nginx", "-g", "daemon off;"]
