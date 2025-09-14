@@ -21,7 +21,7 @@ pipeline {
         withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
           sh '''
             docker run --rm -v $(pwd):/usr/src \
-              -e SONAR_HOST_URL=http://localhost:9000 \
+              -e SONAR_HOST_URL=http://15.237.220.124:9000 \
               -e SONAR_LOGIN=$SONAR_TOKEN \
               sonarsource/sonar-scanner-cli \
               -Dsonar.projectKey=book-my-show \
