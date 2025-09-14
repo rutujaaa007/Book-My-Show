@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -23,15 +22,15 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                    sh '''
+                    sh """
                         docker run --rm \
                           -v $WORKSPACE:/usr/src \
                           -e SONAR_HOST_URL=http://15.237.220.124:9000 \
-                          -e SONAR_LOGIN=$SONAR_TOKEN \
+                          -e SONAR_LOGIN=${SONAR_TOKEN} \
                           sonarsource/sonar-scanner-cli \
                           -Dsonar.projectKey=book-my-show \
                           -Dsonar.sources=/usr/src
-                    '''
+                    """
                 }
             }
         }
@@ -57,9 +56,9 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'docker-token', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     script {
-                        IMAGE = "${DOCKERHUB_REPO}:${BUILD_NUMBER}"
+                        def IMAGE = "${DOCKERHUB_REPO}:${BUILD_NUMBER}"
                         sh "docker build -t ${IMAGE} ."
-                        sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+                        sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin"
                         sh "docker push ${IMAGE}"
                         env.IMAGE = IMAGE
                     }
@@ -69,10 +68,12 @@ pipeline {
 
         stage('Deploy to Docker Container') {
             steps {
-                sh '''
-                    docker rm -f bms || true
-                    docker run -d -p 3000:3000 --name bms ${IMAGE}
-                '''
+                script {
+                    sh """
+                        docker rm -f bms || true
+                        docker run -d -p 3000:3000 --name bms ${env.IMAGE}
+                    """
+                }
             }
         }
     }
