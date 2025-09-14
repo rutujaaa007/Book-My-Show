@@ -1,3 +1,4 @@
+# ---- Build Stage ----
 FROM node:18-alpine AS build
 
 WORKDIR /app
@@ -7,16 +8,24 @@ RUN npm install
 
 COPY bookmyshow-app/ ./
 
-# 👇 must be set BEFORE the build command
+# 👇 Fix for Node 18 crypto issue
 ENV NODE_OPTIONS=--openssl-legacy-provider
 
 RUN npm run build
 
-# If you have a second stage for production, continue here
+# ---- Production Stage ----
 FROM node:18-alpine
 
 WORKDIR /app
 
+# Only copy the final build output
 COPY --from=build /app/build ./build
 
-CMD ["npm", "start"]
+# If your app runs with a server (like express):
+# COPY --from=build /app/node_modules ./node_modules
+# COPY --from=build /app/package*.json ./
+# CMD ["npm", "start"]
+
+# If it's static React build (served via nginx):
+RUN npm install -g serve
+CMD ["serve", "-s", "build", "-l", "3000"]
