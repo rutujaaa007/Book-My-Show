@@ -52,10 +52,20 @@ pipeline {
         }
 
         stage('Install Dependencies') {
-            steps {
-                sh 'npm ci'
-            }
+    steps {
+        dir('bookmyshow-app') {   // move into the right folder
+            sh 'npm ci'
         }
+    }
+}
+
+stage('Build') {
+    steps {
+        dir('bookmyshow-app') {
+            sh 'npm run build'
+        }
+    }
+}
 
         stage('Docker Build & Push') {
             steps {
