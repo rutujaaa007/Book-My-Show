@@ -1,112 +1,89 @@
-(without K8S Stage)
 pipeline {
-    agent any
-    tools {
-        jdk 'jdk17'
-        nodejs 'node23'
-    }
-    environment {
-        SCANNER_HOME = tool 'sonar-scanner'
-    }
-    stages {
-        stage('Clean Workspace') {
-            steps {
-                cleanWs()
-            }
-        }
-        stage('Checkout from Git') {
-            steps {
-                git branch: 'main', url: 'https://github.com/akshu20791/Book-My-Show.git'
-                sh 'ls -la'  // Verify files after checkout
-            }
-        }
-        stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv('sonar-server') {
-                    sh ''' 
-                    $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=BMS \
-                    -Dsonar.projectKey=BMS 
-                    '''
-                }
-            }
-        }
-        stage('Quality Gate') {
-            steps {
-                script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token'
-                }
-            }
-        }
-        stage('Install Dependencies') {
-            steps {
-                sh '''
-                cd bookmyshow-app
-                ls -la  # Verify package.json exists
-                if [ -f package.json ]; then
-                    rm -rf node_modules package-lock.json  # Remove old dependencies
-                    npm install  # Install fresh dependencies
-                else
-                    echo "Error: package.json not found in bookmyshow-app!"
-                    exit 1
-                fi
-                '''
-            }
-        }
-        stage('OWASP FS Scan') {
-            steps {
-                dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
-                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-            }
-        }
-        stage('Trivy FS Scan') {
-            steps {
-                sh 'trivy fs . > trivyfs.txt'
-            }
-        }
-        stage('Docker Build & Push') {
-            steps {
-                script {
-                    withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
-                        sh ''' 
-                        echo "Building Docker image..."
-                        docker build --no-cache -t kastrov/bms:latest -f bookmyshow-app/Dockerfile bookmyshow-app
+  agent any
 
-                        echo "Pushing Docker image to registry..."
-                        docker push kastrov/bms:latest
-                        '''
-                    }
-                }
-            }
-        }
-        stage('Deploy to Container') {
-            steps {
-                sh ''' 
-                echo "Stopping and removing old container..."
-                docker stop bms || true
-                docker rm bms || true
+  environment {
+    DOCKERHUB_REPO = 'rutujashivpuje/book-my-show'
+  }
 
-                echo "Running new container on port 3000..."
-                docker run -d --restart=always --name bms -p 3000:3000 kastrov/bms:latest
-
-                echo "Checking running containers..."
-                docker ps -a
-
-                echo "Fetching logs..."
-                sleep 5  # Give time for the app to start
-                docker logs bms
-                '''
-            }
-        }
+  stages {
+    stage('Clean Workspace') {
+      steps { deleteDir() }
     }
-    post {
-        always {
-            emailext attachLog: true,
-                subject: "'${currentBuild.result}'",
-                body: "Project: ${env.JOB_NAME}<br/>" +
-                      "Build Number: ${env.BUILD_NUMBER}<br/>" +
-                      "URL: ${env.BUILD_URL}<br/>",
-                to: 'kastrokiran@gmail.com',
-                attachmentsPattern: 'trivyfs.txt,trivyimage.txt'
-        }
+
+    stage('Checkout Code') {
+      steps {
+        checkout scm
+      }
     }
+
+    stage('SonarQube Analysis') {
+      steps {
+        withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+          sh '''
+            docker run --rm -v $(pwd):/usr/src \
+              -e SONAR_HOST_URL=http://localhost:9000 \
+              -e SONAR_LOGIN=$SONAR_TOKEN \
+              sonarsource/sonar-scanner-cli \
+              -Dsonar.projectKey=book-my-show \
+              -Dsonar.sources=/usr/src
+          '''
+        }
+      }
+    }
+
+    stage('Wait for Quality Gate') {
+      steps {
+        timeout(time: 5, unit: 'MINUTES') {
+          script {
+            def qg = waitForQualityGate()
+            if (qg.status != 'OK') {
+              error "Pipeline failed due to SonarQube Quality Gate: ${qg.status}"
+            }
+          }
+        }
+      }
+    }
+
+    stage('Install Dependencies') {
+      steps {
+        sh 'npm ci'
+      }
+    }
+
+    stage('Docker Build & Push') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'docker-token', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+          script {
+            IMAGE = "${DOCKERHUB_REPO}:${BUILD_NUMBER}"
+            sh "docker build -t ${IMAGE} ."
+            sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+            sh "docker push ${IMAGE}"
+            env.IMAGE = IMAGE
+          }
+        }
+      }
+    }
+
+    stage('Deploy to Docker Container') {
+      steps {
+        sh '''
+          docker rm -f bms || true
+          docker run -d -p 3000:3000 --name bms ${IMAGE}
+        '''
+      }
+    }
+  }
+
+  post {
+    success {
+      emailext subject: "BMS Build #${BUILD_NUMBER} SUCCESS",
+              body: "Build succeeded: ${BUILD_URL}",
+              to: "your-email@example.com"
+    }
+    failure {
+      emailext subject: "BMS Build #${BUILD_NUMBER} FAILED",
+              body: "Build failed: ${BUILD_URL}",
+              to: "your-email@example.com"
+    }
+  }
 }
